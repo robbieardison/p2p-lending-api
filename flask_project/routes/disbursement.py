@@ -1,29 +1,37 @@
 from flask import render_template, request, redirect, url_for
+import requests
 from app import app
-from bni_integration import initiate_disbursement
+from models import Loan
+
+BNI_API_KEY = 'your_bni_api_key'  
 
 @app.route('/disburse', methods=['POST'])
 def disburse():
-    # This route initiates the disbursement to the borrower's bank using BNI Bank's API.
-    
-    # Fetch the loan details from the database, including the borrower's bank account information.
     loan_id = request.form['loan_id']
     loan = Loan.query.get(loan_id)
     
-    # You would need to provide a function to get the necessary bank account information from the user.
-    # For security reasons, this typically involves additional verification and confirmation steps.
-    bank_account = get_borrower_bank_account(loan.borrower)
+    if not loan.approved:
+        return "Loan not approved"
 
-    # Initiate the disbursement using the BNI API
-    success, message = initiate_disbursement(bank_account, loan.amount)
+    amount = loan.amount
+    borrower_bank_account = loan.borrower.bank_account  # You should have this in your User model
 
-    if success:
-        # Update the loan status upon successful disbursement
-        loan.approved = True
+    # Construct the disbursement request to BNI Bank API
+    disbursement_data = {
+        "api_key": BNI_API_KEY,
+        "amount": amount,
+        "bank_account": borrower_bank_account,
+    }
+
+    # Send the disbursement request to BNI Bank API
+    response = requests.post('https://bni-bank-api-url.com/disburse', json=disbursement_data)
+
+    if response.status_code == 200:
+        # Update the loan status to mark it as disbursed
+        loan.disbursed = True
         db.session.commit()
-        return redirect(url_for('loan_listing'))
+        return "Disbursement successful"
     else:
-        # Handle disbursement errors and show appropriate messages to the user
-        return render_template('disbursement.html', error_message=message)
+        return "Disbursement failed"
 
 # Implement error handling and confirmation messages
